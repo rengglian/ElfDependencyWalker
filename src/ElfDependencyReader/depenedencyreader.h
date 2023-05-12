@@ -47,7 +47,7 @@ private:
     bool initialize(const char *file);
     void cleanup();
     std::vector<std::string> getLibrarySearchPaths();
-    void findDependenciesRecursively(const char* file, std::map<std::string, std::pair<std::string, bool>>& dependencies);
+    void followSimlink(const char * filename, std::map<std::string, std::pair<std::string, bool>> &dependencies);
 
     Elf *e = nullptr;
     std::vector<std::string> customSearchPaths;

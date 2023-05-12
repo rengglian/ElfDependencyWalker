@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <sstream>
 #include <cstring>
+#include <filesystem>
 
 #include "depenedencyreader.h"
 
@@ -127,71 +128,6 @@ void ElfHeaderReader::addCustomSearchPaths(const std::vector<std::string> &paths
     customSearchPaths.insert(customSearchPaths.end(), paths.begin(), paths.end());
 }
 
-void ElfHeaderReader::findDependenciesRecursively(const char *file, std::map<std::string, std::pair<std::string, bool>> &dependencies)
-{
-    if (!initialize(file))
-    {
-        throw std::runtime_error("Failed to initialize ELF reader");
-    }
-
-    Elf_Scn *scn = nullptr;
-    GElf_Shdr shdr;
-
-    while ((scn = elf_nextscn(e, scn)) != nullptr)
-    {
-        if (gelf_getshdr(scn, &shdr) != &shdr)
-        {
-            cleanup();
-            throw std::runtime_error("Failed to get section header");
-        }
-
-        if (shdr.sh_type == SHT_DYNAMIC)
-        {
-            Elf_Data *data = nullptr;
-            while ((data = elf_getdata(scn, data)) != nullptr)
-            {
-                size_t dnum = shdr.sh_size / shdr.sh_entsize;
-
-                for (size_t i = 0; i < dnum; ++i)
-                {
-                    GElf_Dyn dyn;
-                    gelf_getdyn(data, i, &dyn);
-
-                    if (dyn.d_tag == DT_NEEDED)
-                    {
-                        auto name = elf_strptr(e, shdr.sh_link, dyn.d_un.d_val);
-                        if (name == nullptr)
-                            continue;
-                        auto depIter = dependencies.find(name);
-                        if (depIter == dependencies.end())
-                        {
-                            try
-                            {
-                                HeaderStruct dependency_header = readElfHeader(file);
-                                std::string foundFile = searchFile(name, std::make_unique<HeaderStruct>(dependency_header)).first;
-                                bool found = !foundFile.empty();
-                                dependencies[name] = {foundFile, found};
-                                if (found)
-                                {
-                                    cleanup(); // Clean up the current ELF reader state before the recursive call.
-                                    findDependenciesRecursively(foundFile.c_str(), dependencies);
-                                }
-                            }
-                            catch (const std::runtime_error &e)
-                            {
-                                cleanup(); // Ensure proper cleanup even when an exception occurs.
-                                throw e;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    cleanup();
-}
-
 void ElfHeaderReader::getDependenciesRecursive(const char *filename, std::map<std::string, std::pair<std::string, bool>> &dependencies)
 {
 
@@ -271,6 +207,8 @@ void ElfHeaderReader::getDependenciesRecursive(const char *filename, std::map<st
                         dependencies[name] = searchFile(name.c_str(), dependency_header);
                         if(dependencies[name].second)
                         {
+                            followSimlink(dependencies[name].first.c_str(), dependencies);
+
                             getDependenciesRecursive(dependencies[name].first.c_str(), dependencies);
                         }
                     }
@@ -283,6 +221,20 @@ void ElfHeaderReader::getDependenciesRecursive(const char *filename, std::map<st
     elf_end(e);
 }
 
+void ElfHeaderReader::followSimlink(const char *filename, std::map<std::string, std::pair<std::string, bool>> &dependencies)
+{
+    try {
+        std::filesystem::path file_path = filename;
+
+        if (std::filesystem::is_symlink(file_path)) {
+            file_path = file_path.parent_path() / std::filesystem::read_symlink(file_path);
+            dependencies[std::filesystem::read_symlink(filename)] = {file_path, true};
+        }
+
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << "Error: " << e.what() << '\n';
+    }
+}
 
 void ElfHeaderReader::exportDependenciesToFile(const char* file, const std::map<std::string, std::pair<std::string, bool>>& dependencies) {
     std::ofstream outputFile(file);
