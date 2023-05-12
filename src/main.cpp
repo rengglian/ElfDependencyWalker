@@ -5,16 +5,20 @@
 
 int main(int argc, char **argv)
 {
+    std::vector<std::string> customPaths;
     if (argc < 2)
     {
-        std::cerr << "Usage: " << argv[0] << " <elf-file>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <elf-file> <optional-custom-paht1> <optional-custom-paht2> ..." << std::endl;
         return 1;
+    }
+
+    for(int i = 2; i < argc; i++)
+    {
+        customPaths.push_back(argv[i]);    
     }
 
     const char *filename = argv[1];
     ElfHeaderReader reader;    // Add custom search paths
-    
-    std::vector<std::string> customPaths = {"/usr/lib/x86_64-linux-gnu"};
     reader.addCustomSearchPaths(customPaths);
 
     std::map<std::string, std::pair<std::string, bool>> dependencies;

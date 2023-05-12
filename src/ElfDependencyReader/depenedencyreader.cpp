@@ -103,14 +103,14 @@ std::pair<std::string, bool> ElfHeaderReader::searchFile(const char *filename, s
     std::vector<std::string> searchPaths = getLibrarySearchPaths();
     for (const auto &path : searchPaths)
     {
-        std::string fullPath = path + '/' + filename;
+        std::string fullPath = path + filename;
         struct stat buffer;
 
         if (stat(fullPath.c_str(), &buffer) == 0)
         {
             HeaderStruct header = readElfHeader(fullPath.c_str());
             if (/*memcmp(header.e_ident, elfHeader->e_ident, EI_NIDENT) == 0 &&*/
-                header.e_type == elfHeader->e_type &&
+                //header.e_type == elfHeader->e_type &&
                 header.e_machine == elfHeader->e_machine &&
                 header.e_version == elfHeader->e_version)
             {
